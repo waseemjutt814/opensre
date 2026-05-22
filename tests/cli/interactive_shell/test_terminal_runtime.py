@@ -76,6 +76,7 @@ def test_strip_cpr_sequences_removes_terminal_cursor_replies(
 def test_prompt_io_closed_predicate_only_matches_closed_terminal_errors() -> None:
     assert loop_module._is_prompt_io_closed(OSError(errno.EIO, "Input/output error")) is True
     assert loop_module._is_prompt_io_closed(OSError(errno.EBADF, "Bad file descriptor")) is True
+    assert loop_module._is_prompt_io_closed(OSError(errno.ENXIO, "No such device")) is True
     assert loop_module._is_prompt_io_closed(OSError(errno.EACCES, "Permission denied")) is False
 
 

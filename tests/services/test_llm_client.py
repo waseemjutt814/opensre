@@ -1999,6 +1999,51 @@ def test_bedrock_invoke_anthropic_expired_security_token_is_credentials_error(
     assert sleeps == [], "credential errors must not be retried"
 
 
+def test_bedrock_invoke_anthropic_invalid_security_token_is_credentials_error(
+    monkeypatch,
+) -> None:
+    """Invalid AWS credentials should not be reported as model unavailability."""
+    monkeypatch.setattr(
+        "app.guardrails.engine.get_guardrail_engine",
+        _InactiveGuardrailEngine,
+    )
+    sleeps: list[float] = []
+    monkeypatch.setattr(llm_client.time, "sleep", lambda s: sleeps.append(s))
+
+    upstream_message = "The security token included in the request is invalid"
+    resp = _make_anthropic_http_response(403, {"message": upstream_message})
+    err = PermissionDeniedError(
+        message=upstream_message,
+        response=resp,
+        body={"message": upstream_message},
+    )  # type: ignore[arg-type]
+    monkeypatch.setattr(
+        llm_client, "AnthropicBedrock", lambda **_: _make_bedrock_anthropic_client(err)
+    )
+
+    client = llm_client.BedrockLLMClient(model="anthropic.claude-opus-4-7")
+    with pytest.raises(RuntimeError) as excinfo:
+        client.invoke("hello")
+
+    rendered = str(excinfo.value)
+    assert "AWS credentials were rejected" in rendered
+    assert "AWS_ACCESS_KEY_ID" in rendered
+    assert "Marketplace" not in rendered
+    assert sleeps == [], "credential errors must not be retried"
+
+
+def test_bedrock_permission_denied_without_upstream_message_omits_raw_exception() -> None:
+    """A missing upstream message should not echo SDK exception repr noise to users."""
+    resp = _make_anthropic_http_response(403, {})
+    err = PermissionDeniedError(message="", response=resp, body={})  # type: ignore[arg-type]
+
+    rendered = llm_client._format_bedrock_permission_denied("anthropic.claude-test", err)
+
+    assert "not available for your account" in rendered
+    assert "Cause:" not in rendered
+    assert "PermissionDeniedError" not in rendered
+
+
 def test_bedrock_invoke_converse_validation_exception_raises_immediately(monkeypatch) -> None:
     """ValidationException from boto3 converse must raise RuntimeError without retrying."""
     monkeypatch.setattr(

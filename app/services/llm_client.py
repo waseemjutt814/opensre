@@ -364,7 +364,7 @@ def _anthropic_error_message(err: Exception) -> str:
     message = getattr(err, "message", "")
     if isinstance(message, str) and message.strip():
         return message.strip()
-    return str(err)
+    return ""
 
 
 def _format_bedrock_permission_denied(model: str, err: PermissionDeniedError) -> str:

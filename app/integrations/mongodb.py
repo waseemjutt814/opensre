@@ -112,7 +112,7 @@ def _expected_validation_error_detail(err: Exception) -> str | None:
         if err.code == 13:
             return "MongoDB user is not authorized to run the validation ping."
     if isinstance(err, ConfigurationError):
-        return f"MongoDB configuration is invalid: {err}"
+        return "MongoDB configuration is invalid. Check the connection string syntax and options."
     if isinstance(err, ServerSelectionTimeoutError):
         return (
             "MongoDB server selection timed out. Check the host, TLS setting, "

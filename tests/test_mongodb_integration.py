@@ -3,7 +3,12 @@
 import os
 from unittest.mock import MagicMock, patch
 
-from pymongo.errors import OperationFailure, ServerSelectionTimeoutError
+from pymongo.errors import (
+    ConfigurationError,
+    ConnectionFailure,
+    OperationFailure,
+    ServerSelectionTimeoutError,
+)
 
 from app.integrations.catalog import classify_integrations as _classify_integrations
 from app.integrations.mongodb import (
@@ -131,6 +136,45 @@ class TestMongoDBValidation:
         assert "authSource" in result.detail
         mock_report.assert_not_called()
         mock_client.close.assert_called_once()
+
+    @patch("app.integrations.mongodb._get_client")
+    @patch("app.integrations.mongodb.report_validation_failure")
+    def test_validate_authorization_failure_without_sentry(self, mock_report, mock_get_client):
+        mock_client = MagicMock()
+        mock_client.admin.command.side_effect = OperationFailure("not authorized", code=13)
+        mock_get_client.return_value = mock_client
+
+        config = MongoDBConfig(connection_string="mongodb://host")
+        result = validate_mongodb_config(config)
+
+        assert result.ok is False
+        assert "not authorized" in result.detail
+        mock_report.assert_not_called()
+        mock_client.close.assert_called_once()
+
+    @patch(
+        "app.integrations.mongodb._get_client",
+        side_effect=ConfigurationError("bad uri mongodb://user:secret@host"),
+    )
+    @patch("app.integrations.mongodb.report_validation_failure")
+    def test_validate_configuration_error_without_sentry_or_secret(self, mock_report, _):
+        config = MongoDBConfig(connection_string="mongodb://host")
+        result = validate_mongodb_config(config)
+
+        assert result.ok is False
+        assert "configuration is invalid" in result.detail
+        assert "secret" not in result.detail
+        mock_report.assert_not_called()
+
+    @patch("app.integrations.mongodb._get_client", side_effect=ConnectionFailure("network down"))
+    @patch("app.integrations.mongodb.report_validation_failure")
+    def test_validate_connection_failure_without_sentry(self, mock_report, _):
+        config = MongoDBConfig(connection_string="mongodb://host")
+        result = validate_mongodb_config(config)
+
+        assert result.ok is False
+        assert "connection failed" in result.detail
+        mock_report.assert_not_called()
 
     @patch("app.integrations.mongodb._get_client")
     @patch("app.integrations.mongodb.report_validation_failure")
